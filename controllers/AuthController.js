@@ -4,8 +4,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../Models/User'); // Import User model
-const { sendOTPEmail } = require('../Utils/Email'); // Import email helper
 require('dotenv').config();
+const { validationResult } = require('express-validator');
+const { sendPasswordResetEmail, sendVerificationEmail } = require('../Utils/EmailTemplates');
+
 
 // ---------------------------------------------------------------
 // [ POST /api/auth/register ]
@@ -36,10 +38,8 @@ exports.registerUser = async (req, res) => {
     const otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes from now
 
     // --- 4. Send OTP Email ---
-    const emailSent = await sendOTPEmail(email, otp);
-    if (!emailSent) {
-      return res.status(500).json({ message: 'Error sending verification email' });
-    }
+    // Use the new, specific function
+    await sendVerificationEmail(email, otp);
 
     // --- 5. Hash Password ---
     const salt = await bcrypt.genSalt(10);
@@ -76,6 +76,10 @@ exports.registerUser = async (req, res) => {
 
   } catch (error) {
     console.error('Registration Error:', error);
+    // Check if the error was from email sending
+    if (error.message === 'Email sending failed') {
+      return res.status(500).json({ message: 'Error sending verification email. Please try registering again.' });
+    }
     res.status(500).json({ message: 'Server error during registration' });
   }
 };
@@ -200,5 +204,135 @@ exports.loginUser = async (req, res) => {
   } catch (error) {
     console.error('Login Error:', error);
     res.status(500).json({ message: 'Server error during login' });
+  }
+};
+
+
+exports.forgotPassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    // IMPORTANT: For security, we send a success response
+    // even if the user is not found. This prevents "email enumeration".
+    if (!user) {
+      return res.json({
+        message: 'If an account with this email exists, a reset OTP has been sent.',
+      });
+    }
+
+    // Generate new OTP and expiry
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
+
+    // Send the specific password reset email
+    // This now calls your new, dedicated function
+    await sendPasswordResetEmail(user.email, otp);
+
+    res.json({
+      message: 'If an account with this email exists, a reset OTP has been sent.',
+    });
+  } catch (err) {
+    console.error(err.message);
+    // Check if the error was from email sending
+    if (err.message === 'Email sending failed') {
+      // Don't send a 500, as the user (and OTP) was still saved.
+      // The user can try again later. We just log it.
+      console.error('Failed to send password reset email.');
+      // Still send a success response to the client
+      return res.json({
+        message: 'If an account with this email exists, a reset OTP has been sent.',
+      });
+    }
+    res.status(500).send('Server error');
+  }
+};
+
+
+// @desc    Verify OTP for password reset
+// @route   POST /api/auth/verify-reset-otp
+exports.verifyResetOtp = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email, otp } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid OTP or email' });
+    }
+
+    // Check if OTP is valid and not expired
+    if (user.otp !== otp || user.otpExpiry < Date.now()) {
+      return res.status(400).json({ message: 'OTP is invalid or has expired' });
+    }
+
+    // OTP is valid. Send success.
+    res.json({ message: 'OTP verified successfully. You can now reset your password.' });
+
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
+  }
+};
+
+
+// @desc    Reset user's password
+// @route   POST /api/auth/reset-password
+exports.resetPassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    // Send back the specific validation errors
+    const errorMsg = errors.array().map(e => e.msg).join(', ');
+    return res.status(400).json({ message: errorMsg });
+  }
+
+  const { email, otp, newPassword, confirmPassword } = req.body;
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ message: 'Passwords do not match' });
+  }
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid request' });
+    }
+
+    // Re-verify the OTP and expiry as a final security check
+    if (user.otp !== otp || user.otpExpiry < Date.now()) {
+      return res.status(400).json({ message: 'OTP is invalid or has expired. Please try again.' });
+    }
+
+    // All checks passed. Hash new password.
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+
+    // CRITICAL: Clear the OTP fields after successful reset
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+
+    await user.save();
+
+    res.json({ message: 'Password has been reset successfully. Please log in.' });
+
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server error');
   }
 };

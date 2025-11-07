@@ -1,48 +1,40 @@
 const nodemailer = require('nodemailer');
-require('dotenv').config();
 
-// ---------------------------------------------------------------
-// Nodemailer (Email) Setup
-// ---------------------------------------------------------------
+// 1. Configure your email transport (e.g., Nodemailer with Gmail, SendGrid, etc.)
+// IMPORTANT: Use environment variables (process.env) for credentials!
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: 'gmail', // or your email provider
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // This is your Gmail "App Password"
+    user: process.env.EMAIL_USER, // Your email address
+    pass: process.env.EMAIL_PASS, // Your email password or app-specific password
   },
 });
 
-// ---------------------------------------------------------------
-// Helper function to send OTP email
-// ---------------------------------------------------------------
-const sendOTPEmail = async (email, otp) => {
+/**
+ * Sends a generic email.
+ * @param {object} options - Email options.
+ * @param {string} options.to - Recipient's email address.
+ * @param {string} options.subject - Email subject.
+ * @param {string} options.text - Plain text body.
+ * @param {string} [options.html] - (Optional) HTML body.
+ */
+const sendEmail = async ({ to, subject, text, html }) => {
   try {
     const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'GuardianNet - Your Verification Code',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-          <h2 style="color: #333; text-align: center;">GuardianNet Email Verification</h2>
-          <p style="font-size: 16px;">Hello,</p>
-          <p style="font-size: 16px;">Thank you for registering with GuardianNet. Your One-Time Password (OTP) is:</p>
-          <div style="font-size: 24px; font-weight: bold; color: #fff; background-color: #007bff; text-align: center; padding: 10px 20px; border-radius: 5px; margin: 20px 0;">
-            ${otp}
-          </div>
-          <p style="font-size: 16px;">This code will expire in 10 minutes.</p>
-          <p style="font-size: 16px;">If you did not request this, please ignore this email.</p>
-          <p style="font-size: 16px;">Best regards,<br/>The GuardianNet Team</p>
-        </div>
-      `,
+      from: `"Your App Name" <${process.env.EMAIL_USER}>`, // sender address
+      to: to, // list of receivers
+      subject: subject, // Subject line
+      text: text, // plain text body
+      html: html || text, // html body (defaults to text if not provided)
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`OTP email sent to ${email}`);
-    return true;
+    console.log(`Email sent successfully to ${to}`);
   } catch (error) {
-    console.error(`Error sending OTP email to ${email}:`, error);
-    return false;
+    console.error(`Error sending email to ${to}:`, error);
+    // Re-throw the error so the calling function can handle it
+    throw new Error('Email sending failed');
   }
 };
 
-module.exports = { sendOTPEmail };
+module.exports = sendEmail;

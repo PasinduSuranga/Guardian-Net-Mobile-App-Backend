@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const connectDB = require('./config/db');
 const authRoutes = require('./Routes/auth');
+const userRoutes = require('./Routes/user');
 
 // Initialize App
 const app = express();
@@ -23,6 +24,7 @@ app.use(bodyParser.json()); // Parse incoming JSON requests
 // API Routes
 // All auth routes will be prefixed with /api/auth
 app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
 
 // Start Server
 app.listen(PORT, () => {
