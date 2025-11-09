@@ -4,6 +4,8 @@ const { PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const Booking = require('../Models/Booking'); // 👈 ADD THIS
+const MedicineRequest = require('../Models/MedicineRequest'); // 👈 ADD THIS
 
 // @desc    Get the logged-in user's profile
 // @route   GET /api/users/profile
@@ -136,9 +138,65 @@ const changePassword = async (req, res) => {
   }
 };
 
+// --- THIS IS THE FIX (Part 1) ---
+// Changed 'exports.getUserActivities' to 'const getUserActivities'
+const getUserActivities = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Fetch all caregiver bookings
+    const bookings = await Booking.find({ user: userId })
+      .populate('caregiver', 'name') // Get caregiver's name
+      .sort({ createdAt: -1 });
+
+    // 2. Fetch all medicine requests
+    const medRequests = await MedicineRequest.find({ user: userId })
+      .sort({ createdAt: -1 });
+
+    // 3. Map bookings to a standard "activity" format
+    const bookingActivities = bookings.map(b => ({
+      _id: b._id,
+      type: 'booking',
+      status: b.status,
+      paymentStatus: b.paymentStatus,
+      // Create a user-friendly title
+      title: `Booking: ${b.caregiver?.name || 'Caregiver'}`,
+      // Create a user-friendly description
+      description: `Status: ${b.status} | Payment: ${b.paymentStatus.replace('_', ' ')}`,
+      createdAt: b.createdAt,
+    }));
+
+    // 4. Map medicine requests to the same "activity" format
+    const medRequestActivities = medRequests.map(mr => ({
+      _id: mr._id,
+      type: 'medicine_request',
+      status: mr.status,
+      title: `Medicine Request: ${mr.medicineName || 'Prescription'}`,
+      description: `Status: ${mr.status}`,
+      createdAt: mr.createdAt,
+    }));
+
+    // 5. Combine both arrays
+    const allActivities = [...bookingActivities, ...medRequestActivities];
+
+    // 6. Sort the combined array by date (newest first)
+    allActivities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    // 7. Send the final list
+    res.json(allActivities);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// --- THIS IS THE FIX (Part 2) ---
+// You must add 'getUserActivities' to the module.exports
 module.exports = {
   getProfile,
   updateProfile,
   generateUploadUrl,
   changePassword,
+  getUserActivities, // 👈 ADDED THIS LINE
 };
