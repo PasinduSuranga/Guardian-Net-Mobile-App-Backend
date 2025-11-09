@@ -9,6 +9,11 @@ require('dotenv').config();
 const connectDB = require('./config/db');
 const authRoutes = require('./Routes/auth');
 const userRoutes = require('./Routes/user');
+const bookingRoutes = require('./Routes/booking');
+const notificationRoutes = require('./Routes/notifications'); // 👈 ADD THIS
+const testRoutes = require('./Routes/test');
+const medicinRoutes = require('./Routes/medicineRequestRoutes');
+const medicineOrderRoutes = require('./Routes/medicineOrderRoutes');
 
 // Initialize App
 const app = express();
@@ -25,6 +30,11 @@ app.use(bodyParser.json()); // Parse incoming JSON requests
 // All auth routes will be prefixed with /api/auth
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/notifications', notificationRoutes); // 👈 ADD THIS
+app.use('/api/test', testRoutes);
+app.use('/api/medicine-requests', medicinRoutes);
+app.use('/api/medicine-orders', medicineOrderRoutes);
 
 // Start Server
 app.listen(PORT, () => {
