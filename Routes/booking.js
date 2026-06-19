@@ -33,6 +33,8 @@ router.put('/:id/check-in', protect, caregiverCheckIn);
 // @access  Private (User)
 router.put('/:id/submit-final-payment', protect, submitFinalPayment);
 
+
+
 // You can add more routes here later, e.g.:
 // router.get('/my-bookings', protect, getMyBookings);
 // router.put('/:id/confirm', protect, confirmBooking); // For caregivers
